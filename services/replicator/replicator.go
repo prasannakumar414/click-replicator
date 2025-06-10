@@ -3,6 +3,7 @@ package replicator
 import (
 	"context"
 
+	"github.com/prasannakumar414/click-replicator/utils"
 	"go.uber.org/zap"
 )
 
@@ -26,6 +27,7 @@ type Inserter interface {
 
 type Generator interface {
 	GenerateFileFromJSON(rows []string, fileName string) error
+	GenerateJSONlFromTable(tableName string) (string, error)
 }
 
 type Replicator struct {
@@ -33,7 +35,7 @@ type Replicator struct {
 	destination DataSource
 	logger      *zap.Logger
 	generator   Generator
-	inserter   Inserter
+	inserter    Inserter
 }
 
 func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, generator Generator, inserter Inserter) *Replicator {
@@ -42,7 +44,7 @@ func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource
 		destination: destination,
 		logger:      logger,
 		generator:   generator,
-		inserter:   inserter,
+		inserter:    inserter,
 	}
 }
 
@@ -84,8 +86,6 @@ func (n *Replicator) ReplicateDatabase() error {
 			continue
 		}
 
-		extractedRowCount := 0
-
 		if tableExists {
 
 			uCurrentRowCount, err := n.destination.GetRowCount(context.Background(), table)
@@ -101,39 +101,16 @@ func (n *Replicator) ReplicateDatabase() error {
 			}
 		}
 
-		fileName := table + "_final.jsonl"
-
-		for extractedRowCount < rowCount {
-			rows, err := n.source.GetRowJsonsWithLimit(context.Background(), table, "JSON", 5000, extractedRowCount)
-			if err != nil {
-				n.logger.Error("Error when getting row jsons from clickhouse", zap.Error(err))
-				return err
-			}
-			extractedRowCount += len(rows)
-			if !tableExists {
-				n.logger.Info("uses 1000 rows for schema inference")
-				err = n.destination.CreateTableFromJSONData(context.Background(), table, "tuple()", rows[:1])
-				if err != nil {
-					n.logger.Error("Error when creating table from JSON data", zap.Error(err))
-					err = n.destination.CreateClickhouseTable(context.Background(), table, rows[0])
-					if err != nil {
-						n.logger.Error("Error when creating table from JSON data", zap.Error(err))
-						continue
-					}
-				}
-				tableExists = true
-			}
-			err = n.generator.GenerateFileFromJSON(rows, fileName)
-			if err != nil {
-				n.logger.Error("Error when creating file", zap.Error(err))
-				return err
-			}
-			n.logger.Info("extracted rows from database", zap.Int("extracted count", extractedRowCount))
+		fileName, err := n.generator.GenerateJSONlFromTable(table)
+		if err != nil {
+			n.logger.Error("Error generating JSONL file", zap.String("table", table), zap.Error(err))
+			continue
 		}
+		err = n.destination.CreateTableFromJSONData(context.Background(), table, "tuple()", utils.GetFileContent(fileName))
 		err = n.inserter.InsertToClickhouse(context.Background(), n.logger, table, fileName, "JSONEachRow")
 		if err != nil {
 			n.logger.Error("Error when Inserting to Clickhouse", zap.Error(err))
-			return err
+			continue
 		}
 		n.logger.Info("Successfully Replicated " + table)
 	}

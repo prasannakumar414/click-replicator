@@ -8,20 +8,21 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/prasannakumar414/click-replicator/tools"
+	"github.com/prasannakumar414/click-replicator/utils"
 
 	"go.uber.org/zap"
 )
 
 type ClickhouseService struct {
-	Conn   driver.Conn
-	logger *zap.Logger
+	Conn     driver.Conn
+	logger   *zap.Logger
 	database string
 }
 
 func NewClickhouseService(conn driver.Conn, logger *zap.Logger, database string) *ClickhouseService {
-	return &ClickhouseService {
-		Conn:   conn,
-		logger: logger,
+	return &ClickhouseService{
+		Conn:     conn,
+		logger:   logger,
 		database: database,
 	}
 }
@@ -104,21 +105,28 @@ func (service *ClickhouseService) GetRowJsons(ctx context.Context, tableName str
 
 func (service *ClickhouseService) GetRowJsonsWithLimit(ctx context.Context, tableName string, format string, limit int, offset int) ([]string, error) {
 	query := fmt.Sprintf("SELECT * FROM %s.%s limit %d offset %d FORMAT %s", service.database, tableName, limit, offset, format)
-
+	fmt.Println("query: ", query)
 	rows, err := service.Conn.Query(ctx, query)
 	if err != nil {
 		fmt.Println("Error executing query:", err)
 		return nil, err
 	}
 	defer rows.Close()
-
+	columnNames := rows.Columns()
 	var jsonData []string
 	for rows.Next() {
-		var data string
-		if err := rows.Scan(&data); err != nil {
+		var data []any = make([]any, len(columnNames))
+		fmt.Println("data: ", data)
+		if err := rows.Scan(data...); err != nil {
 			return nil, err
 		}
-		jsonData = append(jsonData, data)
+		fmt.Println("data: ", data)
+		var json map[string]any = make(map[string]any)
+		for i, columnName := range columnNames {
+			json[columnName] = data[i]	
+		}
+		jsonString, _ := utils.MapToJSON(json)
+		jsonData = append(jsonData, jsonString)
 	}
 
 	if err := rows.Err(); err != nil {

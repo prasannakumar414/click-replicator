@@ -3,6 +3,8 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -150,4 +152,27 @@ func DeleteJSONKey(jsonStr, key string) (string, error) {
 	}
 
 	return string(modifiedJSON), nil
+}
+
+func MapToJSON(data map[string]interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonData), nil
+}
+
+func GetFileContent(filePath string) []string{
+
+	contentBytes, err := os.ReadFile(filePath) // Reads the entire file into a byte slice
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+
+	contentString := string(contentBytes) // Convert byte slice to string
+
+	// Split the string by newline characters
+	lines := strings.Split(contentString, "\n")
+
+	return lines
 }
