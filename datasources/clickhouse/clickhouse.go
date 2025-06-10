@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/prasannakumar414/flatsert/tools"
-	"github.com/prasannakumar414/flatsert/utils"
 
 	"go.uber.org/zap"
 )
@@ -24,28 +22,6 @@ func NewClickhouseService(conn driver.Conn, logger *zap.Logger) *ClickhouseServi
 		Conn:   conn,
 		logger: logger,
 	}
-}
-
-func (service *ClickhouseService) Insert2(ctx context.Context, database string, tableName string, rowData []map[string]interface{}) error {
-	if len(rowData) == 0 {
-		service.logger.Error("rowData cannot be empty", zap.String("table", tableName))
-		return fmt.Errorf("rowData cannot be empty for table %s", tableName)
-	}
-	for _, row := range rowData {
-		insertQuery := fmt.Sprintf("INSERT INTO %s.%s ", database, tableName)
-		columns, values, err := utils.TransformedValues(row)
-		if err != nil {
-			fmt.Println("Error transforming values:", err)
-			continue
-		}
-		insertQuery += fmt.Sprintf("%s VALUES %s", columns, values)
-		err = service.Conn.AsyncInsert(ctx, insertQuery, false)
-		if err != nil {
-			service.logger.Error("Error executing insert query", zap.String("query", insertQuery), zap.String("table", tableName), zap.Error(err))
-			return fmt.Errorf("error executing insert query for table %s: %w", tableName, err)
-		}
-	}
-	return nil
 }
 
 func (service *ClickhouseService) GetAllTables(ctx context.Context, database string) ([]string, error) {
@@ -182,17 +158,9 @@ func (cs ClickhouseService) GetAllColumnNameAndTypes(database string, table stri
 	columnsCreationString := ""
 	columnsString := []string{}
 	index := 0
-	for key, _ := range flattenedJson {
-		// inferredType := utils.GetDataType(utils.ConvertToString(value))
-		// if key == "properties_hs_object_id" {
-		// 	inferredType = "String" // Ensure id is always String
-		// }
+	for key := range flattenedJson {
 		inferredType := "String"
-		if key != "properties_hs_object_id" {
-			columnsCreationString += fmt.Sprintf("%s Nullable(%s), ", key, inferredType)
-		} else {
-			columnsCreationString += fmt.Sprintf("%s %s, ", key, inferredType) // Ensure id is always String
-		}
+		columnsCreationString += fmt.Sprintf("%s Nullable(%s), ", key, inferredType)
 		columnsString = append(columnsString, key)
 		index++
 	}
@@ -245,23 +213,8 @@ func (cs ClickhouseService) GetColumnNames(ctx context.Context, database string,
 	return columnNames, nil
 }
 
-func (cs ClickhouseService) GetLatestSyncTime(ctx context.Context, database string, tableName string) (*time.Time, error) {
-	var time *time.Time
-	query := fmt.Sprintf("SELECT _airbyte_extracted_at from %s.%s LIMIT 1", database, tableName)
-	rows, err := cs.Conn.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		if err := rows.Scan(&time); err != nil {
-			return nil, err
-		}
-	}
-	return time, nil
-}
-
 func (cs ClickhouseService) CreateTableFromJSONFile(ctx context.Context, database string, tableName string, orderBy string, fileName string) error {
-	query := "CREATE TABLE %s.%s ENGINE = ReplacingMergeTree ORDER BY %s AS SELECT * FROM file('%s') SETTINGS schema_inference_make_columns_nullable = 0"
+	query := "CREATE TABLE %s.%s ENGINE = MergeTree ORDER BY %s AS SELECT * FROM file('%s') SETTINGS schema_inference_make_columns_nullable = 0"
 	query = fmt.Sprintf(query, database, tableName, orderBy, fileName)
 	err := cs.Conn.Exec(ctx, query)
 	if err != nil {
@@ -276,7 +229,7 @@ func (cs ClickhouseService) CreateTableFromJSONData(ctx context.Context, databas
 		s = strings.ReplaceAll(s, "'", "\\'")
 		rowsData += s + " "
 	}
-	query := "CREATE TABLE %s.%s ENGINE = ReplacingMergeTree ORDER BY %s AS SELECT * FROM format(JSONEachRow, '%s') SETTINGS schema_inference_make_columns_nullable = 0"
+	query := "CREATE TABLE %s.%s ENGINE = MergeTree ORDER BY %s AS SELECT * FROM format(JSONEachRow, '%s') SETTINGS schema_inference_make_columns_nullable = 0"
 	query = fmt.Sprintf(query, database, tableName, orderBy, rowsData)
 	err := cs.Conn.Exec(ctx, query)
 	if err != nil {

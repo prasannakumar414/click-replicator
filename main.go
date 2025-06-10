@@ -4,7 +4,7 @@ import (
 	"github.com/prasannakumar414/flatsert/datasources/clickhouse"
 	"github.com/prasannakumar414/flatsert/models"
 	"github.com/prasannakumar414/flatsert/services/finalizer"
-	"github.com/prasannakumar414/flatsert/services/normalizer"
+	"github.com/prasannakumar414/flatsert/services/replicator"
 	"github.com/prasannakumar414/flatsert/services/submitter"
 	"go.uber.org/zap"
 )
@@ -37,7 +37,7 @@ func (f *FlatSert) ReplicateJSONtoSchema() error {
 	clickhouseService := clickhouse.NewClickhouseService(conn, logger)
 	finalize := finalizer.NewFinalizer(logger, clickhouseService)
 	submitter := submitter.NewSubmitter(f.config.Host)
-	normalizer := normalizer.NewNormalizer(logger, clickhouseService, finalize, submitter)
+	normalizer := replicator.NewReplicator(logger, clickhouseService, finalize, submitter)
 	err = normalizer.ReplicateDatabase(f.sourceDatabase, f.columnName, f.newDatabase)
 	return err
 }

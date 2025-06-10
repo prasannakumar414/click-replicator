@@ -1,12 +1,8 @@
-package normalizer
+package replicator
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"time"
 
-	"github.com/prasannakumar414/flatsert/tools"
 	"github.com/prasannakumar414/flatsert/utils"
 	"go.uber.org/zap"
 )
@@ -17,12 +13,10 @@ type DataSource interface {
 	IsTableExists(ctx context.Context, database string, tableName string) (bool, error)
 	CreateClickhouseTable(ctx context.Context, database string, tableName string, rowJson string) error
 	AddColumns(ctx context.Context, database string, tableName string, columns []string) error
-	Insert2(ctx context.Context, database string, tableName string, rowData []map[string]interface{}) error
 	GetColumnNames(ctx context.Context, database string, tableName string) ([]string, error)
 	CreateTableFromJSONFile(ctx context.Context, database string, tableName string, orderBy string, fileName string) error
 	CreateDatabase(ctx context.Context, database string) error
 	OptimizeTable(ctx context.Context, database string, tableName string) error
-	GetLatestSyncTime(ctx context.Context, database string, tableName string) (*time.Time, error)
 	GetRowJsonsWithLimit(ctx context.Context, database string, tableName string, columnName string, format string, limit int, offset int) ([]string, error)
 	CreateTableFromJSONData(ctx context.Context, database string, tableName string, orderBy string, rows []string) error
 }
@@ -35,15 +29,15 @@ type Finalizer interface {
 	FinalizeJSONData(rows []string, fileName string) error
 }
 
-type Normalizer struct {
+type Replicator struct {
 	dataSource DataSource
 	logger     *zap.Logger
 	finalizer  Finalizer
 	submitter  Submitter
 }
 
-func NewNormalizer(logger *zap.Logger, dataSource DataSource, finalizer Finalizer, submitter Submitter) *Normalizer {
-	return &Normalizer{
+func NewReplicator(logger *zap.Logger, dataSource DataSource, finalizer Finalizer, submitter Submitter) *Replicator {
+	return &Replicator{
 		dataSource: dataSource,
 		logger:     logger,
 		finalizer:  finalizer,
@@ -51,45 +45,13 @@ func NewNormalizer(logger *zap.Logger, dataSource DataSource, finalizer Finalize
 	}
 }
 
-func (n Normalizer) GetAllColumnNameAndTypes(database string, table string, rowJson string) (string, []string, error) {
-	jsonData := []byte(rowJson)
-	var dataMap map[string]interface{}
-	if err := json.Unmarshal(jsonData, &dataMap); err != nil {
-		fmt.Println("Error unmarshalling JSON:", err)
-		return "", nil, err
-	}
-	flattenedJson, err := tools.Flatten(dataMap, "", tools.UnderscoreStyle)
-	if err != nil {
-		fmt.Println("Error flattening JSON:", err)
-		return "", nil, err
-	}
-
-	columnsCreationString := ""
-	columnsString := []string{}
-	index := 0
-	for key, value := range flattenedJson {
-		inferredType := utils.GetDataType(utils.ConvertToString(value))
-		if key == "id" {
-			inferredType = "String" // Ensure id is always String
-		}
-		if key != "id" {
-			columnsCreationString += fmt.Sprintf("%s Nullable(%s), ", key, inferredType)
-		} else {
-			columnsCreationString += fmt.Sprintf("%s %s, ", key, inferredType) // Ensure id is always String
-		}
-		columnsString = append(columnsString, key)
-		index++
-	}
-	return columnsCreationString, columnsString, nil
-}
-
-func (n *Normalizer) ReplicateDatabase(sourceDatabase string, columnName string, newDatabase string) error {
+func (n *Replicator) ReplicateDatabase(sourceDatabase string, columnName string, newDatabase string) error {
 	// Normalization logic for the database
 	// We must fetch all the tables of the database (In our case we are normalizng JSON data)
 	// Create Respective jsonl files with data
 	// Infer schema from the jsonl files and Insert in to the respective Tables.
 
-	n.logger.Info("Replication V2 has begun")
+	n.logger.Info("Replication has begun")
 
 	tables, err := n.dataSource.GetAllTables(context.Background(), sourceDatabase)
 
@@ -126,10 +88,6 @@ func (n *Normalizer) ReplicateDatabase(sourceDatabase string, columnName string,
 
 		database := newDatabase
 		extractedRowCount := 0
-
-		if newTableName == "contacts" {
-			continue
-		}
 
 		if tableExists {
 
