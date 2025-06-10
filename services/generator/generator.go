@@ -2,17 +2,21 @@ package generator
 
 import (
 	"os"
+	"os/exec"
 
+	"github.com/prasannakumar414/click-replicator/models"
 	"go.uber.org/zap"
 )
 
 type Generator struct {
-	logger *zap.Logger
+	logger       *zap.Logger
+	sourceConfig models.ClickHouseConfig
 }
 
-func NewGenerator(logger *zap.Logger) *Generator {
+func NewGenerator(logger *zap.Logger, config models.ClickHouseConfig) *Generator {
 	return &Generator{
-		logger: logger,
+		logger:       logger,
+		sourceConfig: config,
 	}
 }
 
@@ -34,4 +38,23 @@ func (f *Generator) GenerateFileFromJSON(rows []string, fileName string) error {
 		return err
 	}
 	return nil
+}
+
+func (f *Generator) GenerateJSONlFromTable(tableName string) (string, error) {
+	cmd := exec.Command("clickhouse-client","--host", f.sourceConfig.Host,"--query", "SELECT * FROM "+f.sourceConfig.Database+"."+tableName+" FORMAT JSONEachRow")
+	fileName := tableName + "_final.jsonl"
+	file, err := os.Create(fileName)
+	if err != nil {
+		return "",err
+	}
+	defer file.Close()
+
+	cmd.Stdout = file
+
+	err = cmd.Run()
+	if err != nil {
+		return "",err
+	}
+
+	return fileName, nil
 }

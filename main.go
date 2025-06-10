@@ -37,7 +37,7 @@ func (f *ClickReplicator) ReplicateDatabase() error {
 	}
 	sourceService := clickhouse.NewClickhouseService(sourceConn, logger, f.sourceConfig.Database)
 	destinationService := clickhouse.NewClickhouseService(destinationConn, logger, f.destinationConfig.Database)
-	generator := generator.NewGenerator(logger)
+	generator := generator.NewGenerator(logger, f.sourceConfig)
 	inserter := inserter.NewInserter(f.destinationConfig)
 	replicator := replicator.NewReplicator(logger, sourceService, destinationService, generator, inserter)
 	err = replicator.ReplicateDatabase()
