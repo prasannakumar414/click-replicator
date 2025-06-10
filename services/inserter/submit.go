@@ -1,4 +1,4 @@
-package submitter
+package inserter
 
 import (
 	"fmt"
@@ -11,17 +11,17 @@ import (
 	"golang.org/x/net/context"
 )
 
-type Submitter struct {
+type Inserter struct {
 	clickhouseConfig models.ClickHouseConfig
 }
 
-func NewSubmitter(config models.ClickHouseConfig) *Submitter {
-	return &Submitter{
+func NewInserter(config models.ClickHouseConfig) *Inserter {
+	return &Inserter{
 		clickhouseConfig: config,
 	}
 }
 
-func (submitter *Submitter) SubmitToClickhouse(ctx context.Context, logger *zap.Logger, table string, ingestionFilePath string, format string) error {
+func (submitter *Inserter) InsertToClickhouse(ctx context.Context, logger *zap.Logger, table string, ingestionFilePath string, format string) error {
 	commandTemplate := `
 #!/bin/bash
 set -euf -o pipefail

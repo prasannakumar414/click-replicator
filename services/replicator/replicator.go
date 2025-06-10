@@ -20,8 +20,8 @@ type DataSource interface {
 	CreateTableFromJSONData(ctx context.Context, tableName string, orderBy string, rows []string) error
 }
 
-type Submitter interface {
-	SubmitToClickhouse(ctx context.Context, logger *zap.Logger, table string, filePath string, format string) error
+type Inserter interface {
+	InsertToClickhouse(ctx context.Context, logger *zap.Logger, table string, filePath string, format string) error
 }
 
 type Generator interface {
@@ -33,16 +33,16 @@ type Replicator struct {
 	destination DataSource
 	logger      *zap.Logger
 	generator   Generator
-	submitter   Submitter
+	inserter   Inserter
 }
 
-func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, generator Generator, submitter Submitter) *Replicator {
+func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, generator Generator, inserter Inserter) *Replicator {
 	return &Replicator{
 		source:      source,
 		destination: destination,
 		logger:      logger,
 		generator:   generator,
-		submitter:   submitter,
+		inserter:   inserter,
 	}
 }
 
@@ -130,7 +130,7 @@ func (n *Replicator) ReplicateDatabase() error {
 			}
 			n.logger.Info("extracted rows from database", zap.Int("extracted count", extractedRowCount))
 		}
-		err = n.submitter.SubmitToClickhouse(context.Background(), n.logger, table, fileName, "JSONEachRow")
+		err = n.inserter.InsertToClickhouse(context.Background(), n.logger, table, fileName, "JSONEachRow")
 		if err != nil {
 			n.logger.Error("Error when Inserting to Clickhouse", zap.Error(err))
 			return err

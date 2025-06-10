@@ -4,8 +4,8 @@ import (
 	"github.com/prasannakumar414/click-replicator/datasources/clickhouse"
 	"github.com/prasannakumar414/click-replicator/models"
 	"github.com/prasannakumar414/click-replicator/services/generator"
+	"github.com/prasannakumar414/click-replicator/services/inserter"
 	"github.com/prasannakumar414/click-replicator/services/replicator"
-	"github.com/prasannakumar414/click-replicator/services/submitter"
 	"go.uber.org/zap"
 )
 
@@ -37,9 +37,9 @@ func (f *ClickReplicator) ReplicateDatabase() error {
 	}
 	sourceService := clickhouse.NewClickhouseService(sourceConn, logger, f.sourceConfig.Database)
 	destinationService := clickhouse.NewClickhouseService(destinationConn, logger, f.destinationConfig.Database)
-	finalize := generator.NewGenerator(logger)
-	submitter := submitter.NewSubmitter(f.destinationConfig)
-	replicator := replicator.NewReplicator(logger, sourceService, destinationService, finalize, submitter)
+	generator := generator.NewGenerator(logger)
+	inserter := inserter.NewInserter(f.destinationConfig)
+	replicator := replicator.NewReplicator(logger, sourceService, destinationService, generator, inserter)
 	err = replicator.ReplicateDatabase()
 	return err
 }
