@@ -6,7 +6,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/prasannakumar414/flatsert/models"
+	"github.com/prasannakumar414/click-replicator/models"
 )
 
 func Connect(clickhouseConfig models.ClickHouseConfig) (driver.Conn, error) {

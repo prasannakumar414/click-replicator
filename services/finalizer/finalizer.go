@@ -1,25 +1,18 @@
 package finalizer
 
 import (
-	"context"
 	"os"
 
 	"go.uber.org/zap"
 )
 
-type ClickhouseService interface {
-	GetRowJsons(ctx context.Context, database string, tableName string, columnName string, condition string, format string) ([]string, error)
-}
-
 type Finalizer struct {
-	logger            *zap.Logger
-	ClickhouseService ClickhouseService
+	logger *zap.Logger
 }
 
-func NewFinalizer(logger *zap.Logger, clickhouseService ClickhouseService) *Finalizer {
+func NewFinalizer(logger *zap.Logger) *Finalizer {
 	return &Finalizer{
-		logger:            logger,
-		ClickhouseService: clickhouseService,
+		logger: logger,
 	}
 }
 

@@ -1,43 +1,45 @@
-package flatsert
+package clickreplicator
 
 import (
-	"github.com/prasannakumar414/flatsert/datasources/clickhouse"
-	"github.com/prasannakumar414/flatsert/models"
-	"github.com/prasannakumar414/flatsert/services/finalizer"
-	"github.com/prasannakumar414/flatsert/services/replicator"
-	"github.com/prasannakumar414/flatsert/services/submitter"
+	"github.com/prasannakumar414/click-replicator/datasources/clickhouse"
+	"github.com/prasannakumar414/click-replicator/models"
+	"github.com/prasannakumar414/click-replicator/services/finalizer"
+	"github.com/prasannakumar414/click-replicator/services/replicator"
+	"github.com/prasannakumar414/click-replicator/services/submitter"
 	"go.uber.org/zap"
 )
 
-type FlatSert struct {
-	config         models.ClickHouseConfig
-	sourceDatabase string
-	columnName     string
-	newDatabase    string
+type ClickReplicator struct {
+	sourceConfig         models.ClickHouseConfig
+	destinationConfig    models.ClickHouseConfig
 }
 
-func NewFlatsert(config models.ClickHouseConfig, sourceDatabase string, columnName string, newDatabase string) *FlatSert {
-	return &FlatSert{
-		config:         config,
-		sourceDatabase: sourceDatabase,
-		columnName:     columnName,
-		newDatabase:    newDatabase,
+func NewClickReplicator(sourceConfig models.ClickHouseConfig, destinationConfig models.ClickHouseConfig) *ClickReplicator {
+	return &ClickReplicator{
+		sourceConfig: sourceConfig,
+		destinationConfig: destinationConfig,
 	}
 }
 
-func (f *FlatSert) ReplicateJSONtoSchema() error {
+func (f *ClickReplicator) ReplicateDatabase() error {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync() // flushes buffer, if any
 	logger.Info("Starting ClickHouse Transformer")
-	conn, err := clickhouse.Connect(f.config)
+	sourceConn, err := clickhouse.Connect(f.sourceConfig)
 	if err != nil {
-		logger.Error("could not connect to clickhouse")
+		logger.Error("could not connect to source clickhouse")
 		return err
 	}
-	clickhouseService := clickhouse.NewClickhouseService(conn, logger)
-	finalize := finalizer.NewFinalizer(logger, clickhouseService)
-	submitter := submitter.NewSubmitter(f.config.Host)
-	normalizer := replicator.NewReplicator(logger, clickhouseService, finalize, submitter)
-	err = normalizer.ReplicateDatabase(f.sourceDatabase, f.columnName, f.newDatabase)
+	destinationConn, err := clickhouse.Connect(f.destinationConfig)
+	if err != nil {
+		logger.Error("could not connect to destination clickhouse")
+		return err
+	}
+	sourceService := clickhouse.NewClickhouseService(sourceConn, logger, f.sourceConfig.Database)
+	destinationService := clickhouse.NewClickhouseService(destinationConn, logger, f.destinationConfig.Database)
+	finalize := finalizer.NewFinalizer(logger)
+	submitter := submitter.NewSubmitter(f.destinationConfig)
+	replicator := replicator.NewReplicator(logger, sourceService, destinationService, finalize, submitter)
+	err = replicator.ReplicateDatabase()
 	return err
 }

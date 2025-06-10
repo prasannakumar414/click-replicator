@@ -3,26 +3,25 @@ package replicator
 import (
 	"context"
 
-	"github.com/prasannakumar414/flatsert/utils"
 	"go.uber.org/zap"
 )
 
 type DataSource interface {
-	GetAllTables(ctx context.Context, database string) ([]string, error)
-	GetRowCount(ctx context.Context, database string, tableName string) (uint64, error)
-	IsTableExists(ctx context.Context, database string, tableName string) (bool, error)
-	CreateClickhouseTable(ctx context.Context, database string, tableName string, rowJson string) error
-	AddColumns(ctx context.Context, database string, tableName string, columns []string) error
-	GetColumnNames(ctx context.Context, database string, tableName string) ([]string, error)
-	CreateTableFromJSONFile(ctx context.Context, database string, tableName string, orderBy string, fileName string) error
-	CreateDatabase(ctx context.Context, database string) error
-	OptimizeTable(ctx context.Context, database string, tableName string) error
-	GetRowJsonsWithLimit(ctx context.Context, database string, tableName string, columnName string, format string, limit int, offset int) ([]string, error)
-	CreateTableFromJSONData(ctx context.Context, database string, tableName string, orderBy string, rows []string) error
+	GetAllTables(ctx context.Context) ([]string, error)
+	GetRowCount(ctx context.Context, tableName string) (uint64, error)
+	IsTableExists(ctx context.Context, tableName string) (bool, error)
+	CreateClickhouseTable(ctx context.Context, tableName string, rowJson string) error
+	AddColumns(ctx context.Context, tableName string, columns []string) error
+	GetColumnNames(ctx context.Context, tableName string) ([]string, error)
+	CreateTableFromJSONFile(ctx context.Context, tableName string, orderBy string, fileName string) error
+	CreateDatabase(ctx context.Context) error
+	OptimizeTable(ctx context.Context, tableName string) error
+	GetRowJsonsWithLimit(ctx context.Context, tableName string, format string, limit int, offset int) ([]string, error)
+	CreateTableFromJSONData(ctx context.Context, tableName string, orderBy string, rows []string) error
 }
 
 type Submitter interface {
-	SubmitToClickhouse(ctx context.Context, logger *zap.Logger, database, table, ingestionFilePath, format string) error
+	SubmitToClickhouse(ctx context.Context, logger *zap.Logger, table string, filePath string, format string) error
 }
 
 type Finalizer interface {
@@ -30,52 +29,51 @@ type Finalizer interface {
 }
 
 type Replicator struct {
-	dataSource DataSource
-	logger     *zap.Logger
-	finalizer  Finalizer
-	submitter  Submitter
+	source      DataSource
+	destination DataSource
+	logger      *zap.Logger
+	finalizer   Finalizer
+	submitter   Submitter
 }
 
-func NewReplicator(logger *zap.Logger, dataSource DataSource, finalizer Finalizer, submitter Submitter) *Replicator {
+func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, finalizer Finalizer, submitter Submitter) *Replicator {
 	return &Replicator{
-		dataSource: dataSource,
-		logger:     logger,
-		finalizer:  finalizer,
-		submitter:  submitter,
+		source:      source,
+		destination: destination,
+		logger:      logger,
+		finalizer:   finalizer,
+		submitter:   submitter,
 	}
 }
 
-func (n *Replicator) ReplicateDatabase(sourceDatabase string, columnName string, newDatabase string) error {
-	// Normalization logic for the database
+func (n *Replicator) ReplicateDatabase() error {
+	// Replication logic for the database
 	// We must fetch all the tables of the database (In our case we are normalizng JSON data)
 	// Create Respective jsonl files with data
-	// Infer schema from the jsonl files and Insert in to the respective Tables.
+	// Insert in to the respective source tables.
 
 	n.logger.Info("Replication has begun")
 
-	tables, err := n.dataSource.GetAllTables(context.Background(), sourceDatabase)
+	tables, err := n.source.GetAllTables(context.Background())
 
 	if err != nil {
 		n.logger.Error("Error fetching tables", zap.Error(err))
 		return err
 	}
 
-	err = n.dataSource.CreateDatabase(context.Background(), newDatabase)
+	err = n.destination.CreateDatabase(context.Background())
 	if err != nil {
 		n.logger.Error("Error when creating database", zap.Error(err))
 	}
 	for _, table := range tables {
-
-		newTableName := utils.RemovePrefix(table, "default_raw__stream_")
-
-		tableExists, err := n.dataSource.IsTableExists(context.Background(), newDatabase, newTableName)
+		tableExists, err := n.destination.IsTableExists(context.Background(), table)
 
 		if err != nil {
-			n.logger.Error("Error checking if table exists", zap.String("table", newTableName), zap.Error(err))
+			n.logger.Error("Error checking if table exists", zap.String("table", table), zap.Error(err))
 			continue
 		}
-		n.logger.Info("Normalizing table", zap.String("table", table))
-		uRowCount, err := n.dataSource.GetRowCount(context.Background(), sourceDatabase, table)
+		n.logger.Info("Replicating table", zap.String("table", table))
+		uRowCount, err := n.source.GetRowCount(context.Background(), table)
 		rowCount := int(uRowCount)
 		if err != nil {
 			n.logger.Error("Error fetching row count", zap.String("table", table), zap.Error(err))
@@ -86,28 +84,27 @@ func (n *Replicator) ReplicateDatabase(sourceDatabase string, columnName string,
 			continue
 		}
 
-		database := newDatabase
 		extractedRowCount := 0
 
 		if tableExists {
 
-			uCurrentRowCount, err := n.dataSource.GetRowCount(context.Background(), database, newTableName)
+			uCurrentRowCount, err := n.destination.GetRowCount(context.Background(), table)
 			if err != nil {
 				n.logger.Error("Error fetching row count", zap.String("table", table), zap.Error(err))
 				continue
 			}
 			currentRowCount := int(uCurrentRowCount)
 
-			if currentRowCount >= rowCount {
+			if currentRowCount == rowCount {
 				n.logger.Info("Skipping the table since current table contains all rows")
 				continue
 			}
 		}
 
-		fileName := database + "_" + newTableName + "_final.jsonl"
+		fileName := table + "_final.jsonl"
 
 		for extractedRowCount < rowCount {
-			rows, err := n.dataSource.GetRowJsonsWithLimit(context.Background(), sourceDatabase, table, columnName, "JSON", 5000, extractedRowCount)
+			rows, err := n.source.GetRowJsonsWithLimit(context.Background(), table, "JSON", 5000, extractedRowCount)
 			if err != nil {
 				n.logger.Error("Error when getting row jsons from clickhouse", zap.Error(err))
 				return err
@@ -115,10 +112,10 @@ func (n *Replicator) ReplicateDatabase(sourceDatabase string, columnName string,
 			extractedRowCount += len(rows)
 			if !tableExists {
 				n.logger.Info("uses 1000 rows for schema inference")
-				err = n.dataSource.CreateTableFromJSONData(context.Background(), database, newTableName, "id", rows[:10])
+				err = n.destination.CreateTableFromJSONData(context.Background(), table, "tuple()", rows[:1])
 				if err != nil {
 					n.logger.Error("Error when creating table from JSON data", zap.Error(err))
-					err = n.dataSource.CreateClickhouseTable(context.Background(), database, newTableName, rows[0])
+					err = n.destination.CreateClickhouseTable(context.Background(), table, rows[0])
 					if err != nil {
 						n.logger.Error("Error when creating table from JSON data", zap.Error(err))
 						continue
@@ -133,16 +130,12 @@ func (n *Replicator) ReplicateDatabase(sourceDatabase string, columnName string,
 			}
 			n.logger.Info("extracted rows from database", zap.Int("extracted count", extractedRowCount))
 		}
-		err = n.submitter.SubmitToClickhouse(context.Background(), n.logger, database, newTableName, fileName, "JSONEachRow")
+		err = n.submitter.SubmitToClickhouse(context.Background(), n.logger, table, fileName, "JSONEachRow")
 		if err != nil {
 			n.logger.Error("Error when Inserting to Clickhouse", zap.Error(err))
 			return err
 		}
-		err = n.dataSource.OptimizeTable(context.Background(), database, newTableName)
-		if err != nil {
-			n.logger.Error("Error when optimizing table", zap.Error(err))
-		}
-		n.logger.Info("Successfully Replicated " + newTableName)
+		n.logger.Info("Successfully Replicated " + table)
 	}
 	return nil
 }

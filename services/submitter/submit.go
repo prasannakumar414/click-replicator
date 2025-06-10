@@ -6,21 +6,22 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/prasannakumar414/click-replicator/models"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
 type Submitter struct {
-	clickhouseHost string
+	clickhouseConfig models.ClickHouseConfig
 }
 
-func NewSubmitter(host string) *Submitter {
+func NewSubmitter(config models.ClickHouseConfig) *Submitter {
 	return &Submitter{
-		clickhouseHost: host,
+		clickhouseConfig: config,
 	}
 }
 
-func (submitter *Submitter) SubmitToClickhouse(ctx context.Context, logger *zap.Logger, database, table, ingestionFilePath, format string) error {
+func (submitter *Submitter) SubmitToClickhouse(ctx context.Context, logger *zap.Logger, table string, ingestionFilePath string, format string) error {
 	commandTemplate := `
 #!/bin/bash
 set -euf -o pipefail
@@ -37,7 +38,7 @@ cat %s | clickhouse-client --host=%s \
 				  --query="INSERT INTO %s Format %s" \
 				  --stacktrace
 `
-	submitCommand := fmt.Sprintf(commandTemplate, ingestionFilePath, submitter.clickhouseHost, database, table, format)
+	submitCommand := fmt.Sprintf(commandTemplate, ingestionFilePath, submitter.clickhouseConfig.Host, submitter.clickhouseConfig.Database, table, format)
 	logger.Info("Executing command", zap.String("command", submitCommand))
 	cmd := exec.CommandContext(ctx, "bash", "-c", submitCommand)
 	stdout := &strings.Builder{}

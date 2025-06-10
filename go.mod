@@ -1,4 +1,4 @@
-module github.com/prasannakumar414/flatsert
+module github.com/prasannakumar414/click-replicator
 
 go 1.24.2
 

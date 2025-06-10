@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prasannakumar414/flatsert/tools"
+	"github.com/prasannakumar414/click-replicator/tools"
 )
 
 func Contains(slice []string, item string) bool {
