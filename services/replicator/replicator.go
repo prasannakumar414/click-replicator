@@ -24,24 +24,24 @@ type Submitter interface {
 	SubmitToClickhouse(ctx context.Context, logger *zap.Logger, table string, filePath string, format string) error
 }
 
-type Finalizer interface {
-	FinalizeJSONData(rows []string, fileName string) error
+type Generator interface {
+	GenerateFileFromJSON(rows []string, fileName string) error
 }
 
 type Replicator struct {
 	source      DataSource
 	destination DataSource
 	logger      *zap.Logger
-	finalizer   Finalizer
+	generator   Generator
 	submitter   Submitter
 }
 
-func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, finalizer Finalizer, submitter Submitter) *Replicator {
+func NewReplicator(logger *zap.Logger, source DataSource, destination DataSource, generator Generator, submitter Submitter) *Replicator {
 	return &Replicator{
 		source:      source,
 		destination: destination,
 		logger:      logger,
-		finalizer:   finalizer,
+		generator:   generator,
 		submitter:   submitter,
 	}
 }
@@ -123,7 +123,7 @@ func (n *Replicator) ReplicateDatabase() error {
 				}
 				tableExists = true
 			}
-			err = n.finalizer.FinalizeJSONData(rows, fileName)
+			err = n.generator.GenerateFileFromJSON(rows, fileName)
 			if err != nil {
 				n.logger.Error("Error when creating file", zap.Error(err))
 				return err

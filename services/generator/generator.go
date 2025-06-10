@@ -1,4 +1,4 @@
-package finalizer
+package generator
 
 import (
 	"os"
@@ -6,17 +6,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type Finalizer struct {
+type Generator struct {
 	logger *zap.Logger
 }
 
-func NewFinalizer(logger *zap.Logger) *Finalizer {
-	return &Finalizer{
+func NewGenerator(logger *zap.Logger) *Generator {
+	return &Generator{
 		logger: logger,
 	}
 }
 
-func (f *Finalizer) FinalizeJSONData(rows []string, fileName string) error {
+func (f *Generator) GenerateFileFromJSON(rows []string, fileName string) error {
 	finalData := ""
 	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

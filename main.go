@@ -3,20 +3,20 @@ package clickreplicator
 import (
 	"github.com/prasannakumar414/click-replicator/datasources/clickhouse"
 	"github.com/prasannakumar414/click-replicator/models"
-	"github.com/prasannakumar414/click-replicator/services/finalizer"
+	"github.com/prasannakumar414/click-replicator/services/generator"
 	"github.com/prasannakumar414/click-replicator/services/replicator"
 	"github.com/prasannakumar414/click-replicator/services/submitter"
 	"go.uber.org/zap"
 )
 
 type ClickReplicator struct {
-	sourceConfig         models.ClickHouseConfig
-	destinationConfig    models.ClickHouseConfig
+	sourceConfig      models.ClickHouseConfig
+	destinationConfig models.ClickHouseConfig
 }
 
 func NewClickReplicator(sourceConfig models.ClickHouseConfig, destinationConfig models.ClickHouseConfig) *ClickReplicator {
 	return &ClickReplicator{
-		sourceConfig: sourceConfig,
+		sourceConfig:      sourceConfig,
 		destinationConfig: destinationConfig,
 	}
 }
@@ -37,7 +37,7 @@ func (f *ClickReplicator) ReplicateDatabase() error {
 	}
 	sourceService := clickhouse.NewClickhouseService(sourceConn, logger, f.sourceConfig.Database)
 	destinationService := clickhouse.NewClickhouseService(destinationConn, logger, f.destinationConfig.Database)
-	finalize := finalizer.NewFinalizer(logger)
+	finalize := generator.NewGenerator(logger)
 	submitter := submitter.NewSubmitter(f.destinationConfig)
 	replicator := replicator.NewReplicator(logger, sourceService, destinationService, finalize, submitter)
 	err = replicator.ReplicateDatabase()
