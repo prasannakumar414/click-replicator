@@ -1,4 +1,5 @@
 # Click-Replicator
+
 A Go package to replicate data from one clickhouse server to another, with support to infer schema.
 
 - Generally we may face issue when we need to replicate data from a database at one clickhouse server to another database hosted at another server, this package solves this issue by replicating the database and all the tables in it. 
@@ -10,7 +11,7 @@ Installation:
 
 Example: (refer examples directory for the file to run)
 
-``` 
+``` go
  sourceConfig := models.ClickHouseConfig{
       Host: "localhost",
       Port: 9000,  
